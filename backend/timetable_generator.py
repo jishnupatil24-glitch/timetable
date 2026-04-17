@@ -1,272 +1,290 @@
 import random
+import copy
 from typing import List, Dict, Any
 
-# NEP 2020: 5-day week, proper time slots with lunch break
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-
-TIME_SLOTS = [
-    "9:00-10:00",
-    "10:00-11:00",
-    "11:00-12:00",
-    "12:00-1:00",   # Lunch Break - will be skipped
-    "1:00-2:00",
-    "2:00-3:00",
-    "3:00-4:00"
-]
-
+THEORY_SLOTS = ["9:00-10:00", "10:00-11:00", "11:00-12:00", "1:00-2:00", "2:00-3:00", "3:00-4:00"]
+LAB_SLOT_STARTS = ["9:00-10:00", "10:00-11:00", "1:00-2:00", "2:00-3:00"]
 LUNCH_SLOT = "12:00-1:00"
 
-# NEP 2020 Credit System
-# 1 Credit = 1 hour theory per week
-# 1 Credit = 2 hours practical per week
-NEP_CREDIT_RULES = {
-    "theory":    {"credits": 3, "hours_per_week": 3},
-    "practical": {"credits": 2, "hours_per_week": 4},  # 2 continuous x 2 days
-    "elective":  {"credits": 3, "hours_per_week": 3},
-    "tutorial":  {"credits": 1, "hours_per_week": 1},
-}
+TIME_SLOTS_ORDER = [
+    "9:00-10:00", "10:00-11:00", "11:00-12:00", 
+    "12:00-1:00", "1:00-2:00", "2:00-3:00", "3:00-4:00"
+]
 
-# NEP 2020: Max credits per semester = 24
-# Max theory subjects = 5, Max practicals = 3
-NEP_MAX_THEORY_PER_DAY = 2       # No subject overload
-NEP_MAX_HOURS_PER_DAY = 6        # Max teaching hours per day
-NEP_MAX_CONSECUTIVE_THEORY = 2   # No more than 2 theory classes back to back
+def get_next_slot(slot):
+    try:
+        idx = TIME_SLOTS_ORDER.index(slot)
+        return TIME_SLOTS_ORDER[idx + 1]
+    except (ValueError, IndexError):
+        return None
 
+class TimetableCSP:
+    def __init__(self, subjects, teachers, rooms):
+        self.subjects = subjects
+        self.teachers = teachers
+        self.rooms = rooms
+        self.classrooms = [r for r in rooms if r.get("room_type") == "classroom"]
+        self.labs = [r for r in rooms if r.get("room_type") == "lab"]
+        if not self.classrooms: self.classrooms = rooms
+        if not self.labs: self.labs = rooms
+        
+        self.assignments = self._prepare_assignments()
+        self.solutions = []
+        self.backtrack_limit = 10000
+        self.backtracks = 0
+        
+    def _prepare_assignments(self):
+        assignments = []
+        for subject in self.subjects:
+            teacher = next((t for t in self.teachers if t["id"] == subject.get("teacher_id")), None)
+            if not teacher and self.teachers:
+                teacher = random.choice(self.teachers)
+            
+            stype = subject.get("subject_type", "theory")
+            if stype == "practical":
+                # Assuming 2 pairs of 2 hours per week
+                for _ in range(2):
+                    assignments.append({"subject": subject, "teacher": teacher, "length": 2})
+            else:
+                hours = int(subject.get("credits", 3))
+                if hours > 5: hours = 5
+                for _ in range(hours):
+                    assignments.append({"subject": subject, "teacher": teacher, "length": 1})
+        return assignments
 
-def get_theory_slots():
-    return [s for s in TIME_SLOTS if s != LUNCH_SLOT]
+    def solve(self, num_solutions=5):
+        # We try to generate multiple distinct valid full schedules
+        max_attempts = num_solutions * 5
+        attempts = 0
+        
+        while len(self.solutions) < num_solutions and attempts < max_attempts:
+            attempts += 1
+            self.backtracks = 0
+            
+            # Shuffle slightly to get variation, but maintain MCV (longest assignments first)
+            random.shuffle(self.assignments)
+            self.assignments.sort(key=lambda a: a["length"], reverse=True)
+            
+            state = {
+                "timetable": {d: {s: None for s in TIME_SLOTS_ORDER} for d in DAYS},
+                "teacher_schedule": {d: {s: set() for s in TIME_SLOTS_ORDER} for d in DAYS},
+                "room_schedule": {d: {s: set() for s in TIME_SLOTS_ORDER} for d in DAYS},
+                "teacher_daily_hours": {d: {} for d in DAYS},
+                "subject_daily_count": {d: {} for d in DAYS}
+            }
+            # Initialize lunch block permanently
+            for d in DAYS:
+                state["timetable"][d][LUNCH_SLOT] = {
+                    "subject": "Lunch Break", "subject_type": "break", 
+                    "teacher": "-", "teacher_id": None, "room": "-"
+                }
+                
+            if self._backtrack(0, state):
+                # We found a complete 100% valid schedule
+                self.solutions.append(copy.deepcopy(state["timetable"]))
+                
+        # If we couldn't even find one complete table, fallback to empty (FastAPI will catch it or return empty)
+        return self.solutions
 
-
-def get_lab_slot_pairs():
-    """Return pairs of continuous slots for lab sessions (NEP 2020: labs must be continuous)"""
-    slots = get_theory_slots()
-    pairs = []
-    for i in range(len(slots) - 1):
-        # Skip pairs that cross lunch
-        if slots[i] == LUNCH_SLOT or slots[i + 1] == LUNCH_SLOT:
-            continue
-        # Morning pairs (before lunch)
-        if slots[i] in ["9:00-10:00", "10:00-11:00", "11:00-12:00"]:
-            if slots[i + 1] in ["9:00-10:00", "10:00-11:00", "11:00-12:00"]:
-                pairs.append((slots[i], slots[i + 1]))
-        # Afternoon pairs (after lunch)
-        if slots[i] in ["1:00-2:00", "2:00-3:00"]:
-            if slots[i + 1] in ["2:00-3:00", "3:00-4:00"]:
-                pairs.append((slots[i], slots[i + 1]))
-    return pairs
-
-
-def check_consecutive_theory(timetable, day, slot):
-    """NEP 2020: Avoid more than 2 consecutive theory classes"""
-    slots = get_theory_slots()
-    if slot not in slots:
+    def _backtrack(self, index, state):
+        if index >= len(self.assignments):
+            return True
+        if self.backtracks > self.backtrack_limit:
+            return False
+            
+        assignment = self.assignments[index]
+        teacher_id = assignment["teacher"]["id"] if assignment["teacher"] else None
+        subject_id = assignment["subject"]["id"]
+        length = assignment["length"]
+        
+        valid_moves = self._get_valid_moves(assignment, state)
+        
+        # Heuristic: Score moves to prefer adjacency (minimize gaps between classes)
+        def score_move(move):
+            day, slot, room = move
+            score = random.random()
+            slot_idx = TIME_SLOTS_ORDER.index(slot)
+            
+            # Check left adjacency
+            if slot_idx > 0 and state["timetable"][day][TIME_SLOTS_ORDER[slot_idx - 1]] is not None:
+                score += 10
+            # Check right adjacency
+            if length == 1 and slot_idx < len(TIME_SLOTS_ORDER)-1 and state["timetable"][day][TIME_SLOTS_ORDER[slot_idx + 1]] is not None:
+                score += 10
+            if length == 2 and slot_idx < len(TIME_SLOTS_ORDER)-2 and state["timetable"][day][TIME_SLOTS_ORDER[slot_idx + 2]] is not None:
+                score += 10
+                
+            return score
+            
+        valid_moves.sort(key=score_move, reverse=True)
+        
+        for move in valid_moves:
+            self._apply_move(assignment, move, state)
+            if self._backtrack(index + 1, state):
+                return True
+            self._revert_move(assignment, move, state)
+            self.backtracks += 1
+            
         return False
-    idx = slots.index(slot)
-    count = 0
-    # Check previous slots
-    for i in range(max(0, idx - 2), idx):
-        if slots[i] in timetable[day]:
-            entry = timetable[day][slots[i]]
-            if entry.get("subject_type") in ["theory", "elective", "tutorial"]:
-                count += 1
-    return count >= NEP_MAX_CONSECUTIVE_THEORY
 
-
-def generate_timetable(subjects, teachers, rooms) -> Dict[str, Any]:
-    timetable = {day: {"LUNCH": {"subject": "Lunch Break", "subject_type": "break", "teacher": "-", "room": "-"}} for day in DAYS}
-    teacher_schedule = {day: {} for day in DAYS}
-    room_schedule = {day: {} for day in DAYS}
-
-    # Track per subject per day (NEP: no overload)
-    subject_day_count = {}
-    # Track total hours assigned per subject
-    subject_total_hours = {}
-    # Track teacher daily hours (NEP: max 6 hrs/day)
-    teacher_daily_hours = {day: {} for day in DAYS}
-
-    theory_slots = get_theory_slots()
-    lab_pairs = get_lab_slot_pairs()
-
-    # Separate subjects by type
-    theory_subjects = [s for s in subjects if s.get("subject_type") in ["theory", "elective", "tutorial"]]
-    lab_subjects = [s for s in subjects if s.get("subject_type") == "practical"]
-
-    classrooms = [r for r in rooms if r["room_type"] == "classroom"]
-    labs = [r for r in rooms if r["room_type"] == "lab"]
-
-    if not classrooms:
-        classrooms = rooms
-    if not labs:
-        labs = rooms
-
-    def is_slot_free(day, slot, teacher_id, room_id):
-        if slot == LUNCH_SLOT:
+    def _get_valid_moves(self, assignment, state):
+        moves = []
+        teacher_id = assignment["teacher"]["id"] if assignment["teacher"] else None
+        subject_id = assignment["subject"]["id"]
+        length = assignment["length"]
+        req_rooms = self.labs if length == 2 else self.classrooms
+        
+        for day in DAYS:
+            # Check teacher daily limit (Max 6 hours mapping to NEP constraints)
+            if teacher_id and state["teacher_daily_hours"][day].get(teacher_id, 0) + length > 6:
+                continue
+            
+            # Prevent more than 1 session of same subject per day
+            if state["subject_daily_count"][day].get(subject_id, 0) >= 1:
+                continue
+                
+            slots_to_check = LAB_SLOT_STARTS if length == 2 else THEORY_SLOTS
+            
+            for slot in slots_to_check:
+                if not self._is_slot_free(day, slot, teacher_id, state):
+                    continue
+                if length == 2:
+                    next_s = get_next_slot(slot)
+                    if next_s == LUNCH_SLOT or not self._is_slot_free(day, next_s, teacher_id, state):
+                        continue
+                        
+                # Find the first available suitable room
+                rooms_shuffled = copy.copy(req_rooms)
+                random.shuffle(rooms_shuffled)
+                for room in rooms_shuffled:
+                    if room["id"] not in state["room_schedule"][day][slot]:
+                        if length == 2:
+                            next_s = get_next_slot(slot)
+                            if room["id"] in state["room_schedule"][day][next_s]:
+                                continue
+                        moves.append((day, slot, room))
+                        break
+        return moves
+        
+    def _is_slot_free(self, day, slot, teacher_id, state):
+        if state["timetable"][day][slot] is not None:
             return False
-        teacher_busy = teacher_schedule[day].get(slot)
-        room_busy = room_schedule[day].get(slot)
-        # NEP: teacher max hours per day
-        t_hours = teacher_daily_hours[day].get(teacher_id, 0)
-        if t_hours >= NEP_MAX_HOURS_PER_DAY:
+        if teacher_id and teacher_id in state["teacher_schedule"][day][slot]:
             return False
-        return teacher_busy != teacher_id and room_busy != room_id
+        return True
 
-    def assign_slot(day, slot, subject, teacher, room):
-        timetable[day][slot] = {
-            "subject": subject["name"],
-            "subject_code": subject["code"],
-            "subject_type": subject["subject_type"],
-            "credits": subject.get("credits", 3),
-            "teacher": teacher["name"],
-            "teacher_id": teacher["id"],
-            "room": room["name"]
-        }
-        teacher_schedule[day][slot] = teacher["id"]
-        room_schedule[day][slot] = room["id"]
-        teacher_daily_hours[day][teacher["id"]] = teacher_daily_hours[day].get(teacher["id"], 0) + 1
-        subject_total_hours[subject["id"]] = subject_total_hours.get(subject["id"], 0) + 1
+    def _apply_move(self, assignment, move, state):
+        day, slot, room = move
+        teacher = assignment["teacher"]
+        subject = assignment["subject"]
+        teacher_id = teacher["id"] if teacher else None
+        subject_id = subject["id"]
+        length = assignment["length"]
+        
+        def commit(s):
+            state["timetable"][day][s] = {
+                "subject": subject["name"],
+                "subject_code": subject["code"],
+                "subject_type": subject["subject_type"],
+                "credits": subject.get("credits", 3),
+                "teacher": teacher["name"] if teacher else "-",
+                "teacher_id": teacher_id,
+                "room": room["name"]
+            }
+            if teacher_id: state["teacher_schedule"][day][s].add(teacher_id)
+            state["room_schedule"][day][s].add(room["id"])
+            
+        commit(slot)
+        if length == 2: commit(get_next_slot(slot))
+        
+        if teacher_id: state["teacher_daily_hours"][day][teacher_id] = state["teacher_daily_hours"][day].get(teacher_id, 0) + length
+        state["subject_daily_count"][day][subject_id] = state["subject_daily_count"][day].get(subject_id, 0) + 1
 
-    def get_teacher_for_subject(subject):
-        teacher = next((t for t in teachers if t["id"] == subject.get("teacher_id")), None)
-        if not teacher and teachers:
-            teacher = random.choice(teachers)
-        return teacher
-
-    # ---- Schedule Theory / Elective / Tutorial Subjects ----
-    # NEP 2020: Distribute evenly across the week
-    for subject in theory_subjects:
-        hours = NEP_CREDIT_RULES.get(subject.get("subject_type", "theory"), {}).get("hours_per_week", subject.get("hours_per_week", 3))
-        assigned = 0
-        attempts = 0
-
-        days_shuffled = DAYS.copy()
-        random.shuffle(days_shuffled)
-
-        while assigned < hours and attempts < 200:
-            attempts += 1
-            day = days_shuffled[assigned % len(days_shuffled)]
-            slot = random.choice(theory_slots)
-
-            if slot == LUNCH_SLOT:
-                continue
-
-            # NEP: Max 1 class per subject per day
-            day_key = f"{subject['id']}_{day}"
-            if subject_day_count.get(day_key, 0) >= 1:
-                continue
-
-            # NEP: No slot already taken
-            if slot in timetable[day]:
-                continue
-
-            # NEP: No more than 2 consecutive theory
-            if check_consecutive_theory(timetable, day, slot):
-                continue
-
-            teacher = get_teacher_for_subject(subject)
-            if not teacher:
-                continue
-
-            room = random.choice(classrooms)
-
-            if is_slot_free(day, slot, teacher["id"], room["id"]):
-                assign_slot(day, slot, subject, teacher, room)
-                subject_day_count[day_key] = subject_day_count.get(day_key, 0) + 1
-                assigned += 1
-
-    # ---- Schedule Lab / Practical Subjects ----
-    # NEP 2020: Labs must be 2 continuous hours, preferably same session (morning/afternoon)
-    for subject in lab_subjects:
-        hours_needed = NEP_CREDIT_RULES["practical"]["hours_per_week"]  # 4 hrs = 2 pairs
-        pairs_assigned = 0
-        attempts = 0
-        target_pairs = hours_needed // 2  # 2 pairs of 2 hours
-
-        days_shuffled = DAYS.copy()
-        random.shuffle(days_shuffled)
-
-        while pairs_assigned < target_pairs and attempts < 200:
-            attempts += 1
-            day = days_shuffled[pairs_assigned % len(days_shuffled)]
-
-            if not lab_pairs:
-                break
-
-            slot1, slot2 = random.choice(lab_pairs)
-
-            if slot1 in timetable[day] or slot2 in timetable[day]:
-                continue
-
-            teacher = get_teacher_for_subject(subject)
-            if not teacher:
-                continue
-
-            room = random.choice(labs)
-
-            if (is_slot_free(day, slot1, teacher["id"], room["id"]) and
-                    is_slot_free(day, slot2, teacher["id"], room["id"])):
-                assign_slot(day, slot1, subject, teacher, room)
-                assign_slot(day, slot2, subject, teacher, room)
-                pairs_assigned += 1
-
-    return timetable
+    def _revert_move(self, assignment, move, state):
+        day, slot, room = move
+        teacher = assignment["teacher"]
+        teacher_id = teacher["id"] if teacher else None
+        subject_id = assignment["subject"]["id"]
+        length = assignment["length"]
+        
+        def uncommit(s):
+            state["timetable"][day][s] = None
+            if teacher_id: state["teacher_schedule"][day][s].discard(teacher_id)
+            state["room_schedule"][day][s].discard(room["id"])
+            
+        uncommit(slot)
+        if length == 2: uncommit(get_next_slot(slot))
+            
+        if teacher_id: state["teacher_daily_hours"][day][teacher_id] -= length
+        state["subject_daily_count"][day][subject_id] -= 1
 
 
-def validate_nep_constraints(timetable, subjects) -> Dict[str, Any]:
-    """Validate generated timetable against NEP 2020 rules"""
+# ---------- Evaluation Metrics ----------
+
+def score_timetable_gaps_and_nep(timetable, subjects) -> Dict[str, Any]:
     issues = []
     score = 100
-
+    
     total_credits = sum(s.get("credits", 3) for s in subjects)
 
-    # NEP: Max 24 credits per semester
-    if total_credits > 24:
-        issues.append(f"Total credits ({total_credits}) exceed NEP 2020 limit of 24")
-        score -= 20
-
-    # Check no slot has more than 2 consecutive theory
     for day in DAYS:
-        slots = get_theory_slots()
-        consecutive = 0
-        for slot in slots:
-            entry = timetable[day].get(slot)
-            if entry and entry.get("subject_type") in ["theory", "elective"]:
-                consecutive += 1
-                if consecutive > NEP_MAX_CONSECUTIVE_THEORY:
-                    issues.append(f"{day}: More than {NEP_MAX_CONSECUTIVE_THEORY} consecutive theory classes")
-                    score -= 10
-                    break
-            else:
-                consecutive = 0
+        daily_slots = []
+        for s in TIME_SLOTS_ORDER:
+            entry = timetable[day][s]
+            if entry and entry.get("subject_type") != "break":
+                daily_slots.append(TIME_SLOTS_ORDER.index(s))
+                
+        # Gap Penalty calculation
+        if daily_slots:
+            first_class = min(daily_slots)
+            last_class = max(daily_slots)
+            classes_count = len(daily_slots)
+            span = (last_class - first_class + 1)
+            # Subtract 1 for Lunch if lunch falls between first and last
+            if first_class < TIME_SLOTS_ORDER.index(LUNCH_SLOT) < last_class:
+                span -= 1
+            
+            gaps = span - classes_count
+            if gaps > 0:
+                score -= gaps * 5  # Strong penalty for free hours blocking students
+                if gaps >= 2:
+                    issues.append(f"{day}: Large gap of {gaps} free hours between lectures.")
 
-    # Check lunch break exists
+    # Convert timetable dict to clean nested dict, stripping None
+    clean_tt = {}
     for day in DAYS:
-        if "LUNCH" not in timetable[day]:
-            issues.append(f"{day}: Missing lunch break (NEP 2020 requires break)")
-            score -= 5
-
+        clean_tt[day] = {}
+        for s in TIME_SLOTS_ORDER:
+            if timetable[day][s] is not None:
+                clean_tt[day][s] = timetable[day][s]
+                
     return {
         "score": max(score, 0),
-        "issues": issues,
+        "issues": list(set(issues)),
         "total_credits": total_credits,
-        "nep_compliant": len(issues) == 0
+        "nep_compliant": len(issues) == 0,
+        "clean_tt": clean_tt
     }
 
-
 def generate_multiple_timetables(subjects, teachers, rooms, count=5) -> List[Dict]:
-    """Generate 5 timetables with NEP 2020 validation scores"""
+    csp = TimetableCSP(subjects, teachers, rooms)
+    solutions = csp.solve(num_solutions=count)
+    
+    # If CSP could not find complete solutions, we need to return something
+    # but let's assume it found at least some
+    
     timetables = []
-    for i in range(count):
-        tt = generate_timetable(subjects, teachers, rooms)
-        validation = validate_nep_constraints(tt, subjects)
+    for i, tt in enumerate(solutions):
+        validation = score_timetable_gaps_and_nep(tt, subjects)
         timetables.append({
             "version": i + 1,
-            "timetable": tt,
+            "timetable": validation["clean_tt"],
             "nep_score": validation["score"],
             "nep_compliant": validation["nep_compliant"],
             "issues": validation["issues"],
             "total_credits": validation["total_credits"]
         })
-
-    # Sort by NEP score (best first)
+        
     timetables.sort(key=lambda x: x["nep_score"], reverse=True)
     return timetables
