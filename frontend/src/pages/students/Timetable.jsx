@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Clock, DoorOpen, AlertCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Calendar, Clock, DoorOpen, AlertCircle, User } from 'lucide-react';
 import API from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -10,7 +10,7 @@ const TIME_SLOTS = [
     'LUNCH', '1:00-2:00', '2:00-3:00', '3:00-4:00'
 ];
 
-export default function TeacherTimetable() {
+export default function StudentTimetable() {
     const { user } = useAuth();
     const [timetable, setTimetable] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -18,18 +18,22 @@ export default function TeacherTimetable() {
 
     useEffect(() => {
         const fetchTimetable = async () => {
-            if (!user?.teacher_id) return;
+            if (!user?.department_id || !user?.semester) {
+                setError("Your profile doesn't have a department or semester assigned.");
+                setLoading(false);
+                return;
+            }
             try {
-                const res = await API.get(`/timetable/teacher/${user.teacher_id}`);
+                const res = await API.get(`/timetable/department/${user.department_id}/semester/${user.semester}`);
                 setTimetable(res.data.timetable);
             } catch (err) {
-                setError(err.response?.data?.detail || 'Could not load your timetable.');
+                setError(err.response?.data?.detail || 'No active timetable found for your department and semester.');
             } finally {
                 setLoading(false);
             }
         };
         fetchTimetable();
-    }, [user?.id]);
+    }, [user]);
 
     const getMySlots = () => {
         if (!timetable) return [];
@@ -42,16 +46,12 @@ export default function TeacherTimetable() {
                 }
             }
         }
-        return mySlots.sort((a, b) => {
-            const dayDiff = DAYS.indexOf(a.day) - DAYS.indexOf(b.day);
-            if (dayDiff !== 0) return dayDiff;
-            return TIME_SLOTS.indexOf(a.slot) - TIME_SLOTS.indexOf(b.slot);
-        });
+        return mySlots;
     };
 
     if (loading) return (
         <div className="flex items-center justify-center h-64 text-slate-400">
-            <div className="w-8 h-8 rounded-full border-2 border-primary-500 border-t-transparent animate-spin mr-3"></div>
+            <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mr-3"></div>
             Loading your schedule...
         </div>
     );
@@ -63,8 +63,6 @@ export default function TeacherTimetable() {
         </motion.div>
     );
 
-    const mySlots = getMySlots();
-
     return (
         <div className="space-y-6">
             <motion.div
@@ -72,8 +70,8 @@ export default function TeacherTimetable() {
                 animate={{ opacity: 1, y: 0 }}
                 className="glass rounded-2xl p-6"
             >
-                <h2 className="text-2xl font-bold text-white mb-1">My Timetable</h2>
-                <p className="text-slate-400">Welcome, {user?.name} — here is your consolidated schedule.</p>
+                <h2 className="text-2xl font-bold text-white mb-1">My Class Timetable</h2>
+                <p className="text-slate-400">Semester {user?.semester} Schedule</p>
             </motion.div>
 
             <motion.div
@@ -88,7 +86,7 @@ export default function TeacherTimetable() {
                             <tr className="border-b border-white/10">
                                 <th className="text-left px-4 py-4 text-slate-400 font-medium text-sm bg-slate-800/30">Time</th>
                                 {DAYS.map(day => (
-                                    <th key={day} className="text-left px-4 py-4 text-slate-400 font-medium text-sm bg-slate-800/30 w-[18%]">{day}</th>
+                                    <th key={day} className="text-center px-4 py-4 text-slate-400 font-medium text-sm bg-slate-800/30 w-[18%]">{day}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -122,25 +120,28 @@ export default function TeacherTimetable() {
                                         }
 
                                         return (
-                                            <td key={day} className="px-3 py-2">
+                                            <td key={day} className="px-3 py-2 min-w-[140px]">
                                                 <motion.div
                                                     whileHover={{ scale: 1.02 }}
-                                                    className="h-full bg-primary-600/20 border border-primary-500/30 rounded-xl p-3 flex flex-col justify-center"
+                                                    className="h-full bg-emerald-600/20 border border-emerald-500/30 rounded-xl p-3 flex flex-col justify-center text-center items-center"
                                                 >
-                                                    <p className="text-white text-xs font-bold leading-tight line-clamp-2" title={entry.subject}>
+                                                    <p className="text-white text-xs font-bold leading-tight" title={entry.subject}>
                                                         {entry.subject}
                                                     </p>
-                                                    <div className="flex items-center justify-between mt-2">
-                                                        <span className="text-primary-300 text-[10px] flex items-center gap-1 font-medium">
+                                                    <div className="flex flex-wrap items-center justify-center gap-2 mt-2 w-full">
+                                                        <span className="text-emerald-300 text-[10px] flex items-center gap-1 font-medium">
                                                             <DoorOpen size={10} /> {entry.room}
                                                         </span>
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${entry.subject_type === 'practical'
-                                                            ? 'bg-yellow-500/20 text-yellow-400'
-                                                            : 'bg-blue-500/20 text-blue-400'
-                                                        }`}>
-                                                            {entry.subject_type === 'practical' ? 'LAB' : 'THEORY'}
+                                                        <span className="text-slate-400 text-[10px] flex items-center gap-1 font-medium">
+                                                            <User size={10} /> {entry.teacher}
                                                         </span>
                                                     </div>
+                                                    <span className={`mt-2 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${entry.subject_type === 'practical'
+                                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                                        : entry.subject_type === 'elective' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
+                                                        }`}>
+                                                        {entry.subject_type}
+                                                    </span>
                                                 </motion.div>
                                             </td>
                                         );
@@ -149,41 +150,6 @@ export default function TeacherTimetable() {
                             ))}
                         </tbody>
                     </table>
-                </div>
-
-                {/* Coming up next / Lectures summary */}
-                <h3 className="text-lg font-bold text-white pt-2 px-1">Upcoming Lectures Overview</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {mySlots.map((slot, i) => (
-                        <motion.div
-                            key={i}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: i * 0.05 }}
-                            className="glass rounded-xl p-4 border border-white/5 hover:border-primary-500/30 transition-colors"
-                        >
-                            <div className="flex items-start justify-between mb-3">
-                                <p className="text-white font-bold text-sm leading-tight pr-2">{slot.subject}</p>
-                                <span className={`shrink-0 text-[9px] px-2 py-1 rounded-md font-bold ${slot.subject_type === 'practical'
-                                    ? 'bg-yellow-500/20 text-yellow-400'
-                                    : 'bg-blue-500/20 text-blue-400'
-                                    }`}>
-                                    {slot.subject_type === 'practical' ? 'LAB' : 'THEORY'}
-                                </span>
-                            </div>
-                            <div className="space-y-1.5">
-                                <p className="text-slate-400 text-xs flex items-center gap-2">
-                                    <Calendar size={12} className="text-primary-400" /> {slot.day}
-                                </p>
-                                <p className="text-slate-400 text-xs flex items-center gap-2">
-                                    <Clock size={12} className="text-primary-400" /> {slot.slot}
-                                </p>
-                                <p className="text-slate-400 text-xs flex items-center gap-2">
-                                    <DoorOpen size={12} className="text-primary-400" /> {slot.room}
-                                </p>
-                            </div>
-                        </motion.div>
-                    ))}
                 </div>
             </motion.div>
         </div>

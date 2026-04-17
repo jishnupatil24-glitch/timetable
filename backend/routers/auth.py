@@ -46,10 +46,23 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     }
 
 @router.get("/me")
-def get_me(current_user: models.User = Depends(auth.get_current_user)):
-    return {
+def get_me(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    user_data = {
         "id": current_user.id,
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role
     }
+
+    if current_user.role == "teacher":
+        teacher = db.query(models.Teacher).filter(models.Teacher.email == current_user.email).first()
+        if teacher:
+            user_data["department_id"] = teacher.department_id
+            user_data["teacher_id"] = teacher.id
+    elif current_user.role == "student":
+        student = db.query(models.Student).filter(models.Student.email == current_user.email).first()
+        if student:
+            user_data["department_id"] = student.department_id
+            user_data["semester"] = student.semester
+
+    return user_data

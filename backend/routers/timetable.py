@@ -215,6 +215,40 @@ def get_timetable(
     }
 
 
+@router.get("/teacher/{teacher_id}")
+def get_teacher_timetable(
+    teacher_id: int,
+    db: Session = Depends(get_db)
+):
+    active_timetables = db.query(models.Timetable).filter(
+        models.Timetable.is_active == True
+    ).all()
+    
+    # We will consolidate their daily schedule across all departments/semesters
+    my_schedule = {day: {} for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]}
+    has_classes = False
+
+    for tt in active_timetables:
+        schedule = json.loads(tt.schedule_json)
+        for day, slots in schedule.items():
+            for slot, entry in slots.items():
+                if entry.get("subject_type") != "break" and entry.get("teacher_id") == teacher_id:
+                    entry_copy = entry.copy()
+                    entry_copy["department_id"] = tt.department_id
+                    entry_copy["semester"] = tt.semester
+                    my_schedule[day][slot] = entry_copy
+                    has_classes = True
+
+    if not has_classes:
+        raise HTTPException(status_code=404, detail="No active classes scheduled for this teacher yet.")
+
+    return {
+        "teacher_id": teacher_id,
+        "timetable": my_schedule
+    }
+
+
+
 @router.get("/all")
 def get_all_timetables(
     db: Session = Depends(get_db),

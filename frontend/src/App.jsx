@@ -8,6 +8,13 @@ import Students from './pages/admin/Students';
 import Rooms from './pages/admin/Rooms';
 import Subjects from './pages/admin/Subjects';
 import Timetable from './pages/admin/Timetable';
+
+import TeacherDashboard from './pages/teachers/Dashboard';
+import TeacherTimetable from './pages/teachers/Timetable';
+
+import StudentDashboard from './pages/students/Dashboard';
+import StudentTimetable from './pages/students/Timetable';
+
 import MainLayout from './layouts/MainLayout';
 
 const ProtectedRoute = ({ children, role }) => {
@@ -64,6 +71,30 @@ function App() {
           <Route path="/admin/timetable" element={
             <ProtectedRoute role="admin">
               <MainLayout><Timetable /></MainLayout>
+            </ProtectedRoute>
+          } />
+
+          {/* Teacher Routes */}
+          <Route path="/teacher" element={
+            <ProtectedRoute role="teacher">
+              <MainLayout><TeacherDashboard /></MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/teacher/timetable" element={
+            <ProtectedRoute role="teacher">
+              <MainLayout><TeacherTimetable /></MainLayout>
+            </ProtectedRoute>
+          } />
+
+          {/* Student Routes */}
+          <Route path="/student" element={
+            <ProtectedRoute role="student">
+              <MainLayout><StudentDashboard /></MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/student/timetable" element={
+            <ProtectedRoute role="student">
+              <MainLayout><StudentTimetable /></MainLayout>
             </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/login" />} />

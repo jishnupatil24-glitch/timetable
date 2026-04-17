@@ -35,12 +35,12 @@ export const AuthProvider = ({ children }) => {
         formData.append('password', password);
 
         const res = await API.post('/auth/login', formData);
-        const userData = {
-            email,
-            role: res.data.role,
-            name: res.data.name
-        };
         localStorage.setItem('token', res.data.access_token);
+        
+        // Fetch full user profile to get id, department_id, semester, etc.
+        const meRes = await API.get('/auth/me');
+        const userData = meRes.data;
+
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
         return res.data;
