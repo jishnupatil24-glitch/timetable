@@ -19,10 +19,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def hash_password(password: str):
-    return pwd_context.hash(password)
+    return pwd_context.hash(password[:72])  # ✅ fixed
 
 def verify_password(plain_password: str, hashed_password: str):
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(plain_password[:72], hashed_password)  # ✅ fixed
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -43,7 +43,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credentials_exception
