@@ -4,9 +4,15 @@ from routers import auth, admin, timetable
 
 app = FastAPI(title="Timetable Generator API", version="1.0.0")
 
+# ✅ CORS FIX (LOCAL + VERCEL)
+origins = [
+    "http://localhost:5173",
+    "https://timetable-alpha-green.vercel.app"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
