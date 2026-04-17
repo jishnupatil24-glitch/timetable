@@ -16,10 +16,10 @@ export default function Navbar({ title }) {
         <motion.div
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="fixed top-0 left-64 right-0 h-16 glass border-b border-white/10 z-40 flex items-center justify-between px-6"
+            className="fixed top-0 left-64 right-0 h-20 glass-panel border-b border-white/[0.04] z-40 flex items-center justify-between px-8 bg-[#030712]/70 backdrop-blur-xl supports-[backdrop-filter]:bg-[#030712]/40"
         >
             {/* Title */}
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
+            <h2 className="text-xl font-bold text-white tracking-wide">{title}</h2>
 
             {/* Right side */}
             <div className="flex items-center gap-4">

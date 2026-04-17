@@ -5,17 +5,19 @@ import API from '../../api';
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
     <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        whileHover={{ y: -4 }}
-        className="glass rounded-2xl p-6 flex items-center gap-4"
+        whileHover={{ y: -5, scale: 1.02 }}
+        className="glass-card p-6 flex items-center gap-5 relative overflow-hidden group cursor-default"
     >
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-            <Icon size={22} className="text-white" />
+        <div className={`absolute -right-4 -top-4 w-24 h-24 ${color}/10 rounded-full blur-2xl group-hover:${color}/30 transition-all duration-500`} />
+        
+        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br from-white/10 to-transparent border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.05)]`}>
+            <Icon size={24} className={`text-white drop-shadow-md`} />
         </div>
-        <div>
-            <p className="text-slate-400 text-sm">{label}</p>
-            <p className="text-2xl font-bold text-white">{value}</p>
+        <div className="z-10">
+            <p className="text-slate-400 text-xs font-semibold tracking-wider uppercase mb-1">{label}</p>
+            <p className="text-3xl font-extrabold text-white tracking-tight">{value}</p>
         </div>
     </motion.div>
 );
@@ -59,17 +61,19 @@ export default function AdminDashboard() {
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass rounded-2xl p-6"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                className="glass-panel rounded-3xl p-8 relative overflow-hidden"
             >
-                <h2 className="text-2xl font-bold text-white mb-1">Welcome back, Admin 👋</h2>
-                <p className="text-slate-400">Here's what's happening in your college today.</p>
+                <div className="absolute right-0 top-0 w-64 h-64 bg-primary-500/10 rounded-full blur-[80px] -z-10 pointer-events-none" />
+                <h2 className="text-3xl font-extrabold text-white mb-2 tracking-tight">Welcome back, <span className="gradient-text">Admin</span> 👋</h2>
+                <p className="text-slate-400 font-medium">College management command center.</p>
             </motion.div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {cards.map((card, i) => (
                     <motion.div key={card.label} transition={{ delay: i * 0.1 }}>
                         <StatCard {...card} />
@@ -78,13 +82,13 @@ export default function AdminDashboard() {
             </div>
 
             <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-                className="glass rounded-2xl p-6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="glass-panel rounded-3xl p-8"
             >
-                <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <h3 className="text-xl font-bold text-white mb-6 tracking-tight">Quick Actions</h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
                         { label: 'Add Teacher', href: '/admin/teachers' },
                         { label: 'Add Subject', href: '/admin/subjects' },
@@ -94,7 +98,7 @@ export default function AdminDashboard() {
                         <a
                             key={action.label}
                             href={action.href}
-                            className="bg-primary-600/20 hover:bg-primary-600/40 border border-primary-500/30 text-primary-300 text-sm font-medium px-4 py-3 rounded-xl text-center transition-all"
+                            className="bg-black/20 hover:bg-primary-600/20 border border-white/5 hover:border-primary-500/40 text-slate-300 hover:text-white hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] text-sm font-bold px-4 py-4 rounded-2xl text-center transition-all duration-300"
                         >
                             {action.label}
                         </a>

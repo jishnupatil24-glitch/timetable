@@ -21,10 +21,17 @@ export default function MainLayout({ children }) {
     const title = pageTitles[location.pathname] || 'Dashboard';
 
     return (
-        <div className="min-h-screen bg-slate-900">
+        <div className="min-h-screen text-slate-200 font-sans">
+            {/* Animated Mesh Background Floor */}
+            <div className="mesh-bg pointer-events-none">
+                <div className="orb primary"></div>
+                <div className="orb secondary"></div>
+                <div className="orb accent"></div>
+            </div>
+
             <Sidebar />
             <Navbar title={title} />
-            <main className="ml-64 pt-16 p-6 min-h-screen">
+            <main className="ml-64 pt-24 px-8 pb-12 min-h-screen relative z-10">
                 {children}
             </main>
         </div>

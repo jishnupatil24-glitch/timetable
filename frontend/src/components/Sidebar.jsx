@@ -45,21 +45,21 @@ export default function Sidebar() {
         <p className="text-xs text-slate-400 mt-1 capitalize">{user?.role} Panel</p>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-2 mt-4">
         {links.map(({ to, icon: Icon, label }) => {
           const active = location.pathname === to;
           return (
             <Link key={to} to={to}>
               <motion.div
-                whileHover={{ x: 4 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                whileHover={{ x: active ? 0 : 4 }}
+                className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 ${
                   active
-                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/30'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-primary-500/10 text-white shadow-[inset_4px_0_0_#00f3ff,0_0_20px_rgba(6,182,212,0.1)] border border-primary-500/20'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
                 }`}
               >
-                <Icon size={18} />
-                <span className="text-sm font-medium">{label}</span>
+                <Icon size={20} className={active ? 'text-[#00f3ff]' : ''} />
+                <span className="text-sm font-semibold tracking-wide">{label}</span>
               </motion.div>
             </Link>
           );
