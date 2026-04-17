@@ -4,11 +4,10 @@ from routers import auth, admin, timetable
 
 app = FastAPI(title="Timetable Generator API", version="1.0.0")
 
-# ✅ TEMPORARY: allow ALL origins (guaranteed to work)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # ← IMPORTANT
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,  # ← only this line changed
     allow_methods=["*"],
     allow_headers=["*"],
 )
