@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const token = localStorage.getItem('token');
         const savedUser = localStorage.getItem('user');
+
         if (token && savedUser) {
             setUser(JSON.parse(savedUser));
             setLoading(false);
@@ -29,21 +30,28 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
+    // ✅ FIXED LOGIN FUNCTION
     const login = async (email, password) => {
-        const formData = new FormData();
+        const formData = new URLSearchParams();
         formData.append('username', email);
         formData.append('password', password);
 
-        const res = await API.post('/auth/login', formData);
+        const res = await API.post('/auth/login', formData, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+        });
+
         localStorage.setItem('token', res.data.access_token);
-        
-        // Fetch full user profile to get id, department_id, semester, etc.
+
+        // Fetch full user profile
         const meRes = await API.get('/auth/me');
         const userData = meRes.data;
 
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
-        return res.data;
+
+        return userData.role; // ✅ return role correctly
     };
 
     const logout = () => {
